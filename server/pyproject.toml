@@ -7,7 +7,10 @@ authors = [
     { name = "Lakshay Maini", email = "62194911+lakshh07@users.noreply.github.com" }
 ]
 requires-python = ">=3.15"
-dependencies = []
+dependencies = [
+    "fastapi>=0.161.1",
+    "uvicorn>=0.54.0",
+]
 
 [project.scripts]
 llmwatch-server = "llmwatch_server:main"

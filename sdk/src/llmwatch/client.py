@@ -3,7 +3,7 @@ import queue
 import threading
 import time
 
-import httpx
+import httpx2
 
 
 class LLMWatch:
@@ -15,7 +15,7 @@ class LLMWatch:
         flush_interval: float = 2.0,
     ) -> None:
         self.queue: queue.Queue[dict] = queue.Queue(maxsize=10_000)
-        self.http = httpx.Client(
+        self.http = httpx2.Client(
             base_url=host, timeout=5, headers={"Authorization": f"Bearer {api_key}"}
         )
         self.batch_size = batch_size
@@ -44,5 +44,5 @@ class LLMWatch:
         if batch:
             try:
                 self.http.post("/v1/ingest", json={"events": batch})
-            except httpx.HTTPError:
+            except httpx2.HTTPError:
                 pass  # Drop the batch if the request fails, not crashing the user main app

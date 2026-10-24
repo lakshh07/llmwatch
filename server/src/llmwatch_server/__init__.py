@@ -1,2 +1,5 @@
+import uvicorn
+
+
 def main() -> None:
-    print("Hello from server!")
+    uvicorn.run("llmwatch_server.app:create_app", factory=True, port=8000)

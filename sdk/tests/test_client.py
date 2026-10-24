@@ -2,7 +2,7 @@ import json
 import time
 from functools import partial
 
-import httpx
+import httpx2
 import pytest
 from llmwatch import LLMWatch
 from llmwatch import client as client_module
@@ -12,12 +12,12 @@ class FakeServer:
     """Stands in for the LLMWatch server and records every request it gets."""
 
     def __init__(self) -> None:
-        self.requests: list[httpx.Request] = []
-        self.responses: list[httpx.Response | Exception] = []
+        self.requests: list[httpx2.Request] = []
+        self.responses: list[httpx2.Response | Exception] = []
 
-    def handler(self, request: httpx.Request) -> httpx.Response:
+    def handler(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
-        result = self.responses.pop(0) if self.responses else httpx.Response(200)
+        result = self.responses.pop(0) if self.responses else httpx2.Response(200)
         if isinstance(result, Exception):
             raise result
         return result
@@ -28,14 +28,14 @@ class FakeServer:
 
 @pytest.fixture
 def server(monkeypatch: pytest.MonkeyPatch) -> FakeServer:
-    # Every httpx.Client that LLMWatch builds talks to FakeServer instead of
+    # Every httpx2.Client that LLMWatch builds talks to FakeServer instead of
     # the network, while keeping the real base_url and headers.
     fake = FakeServer()
-    real_client = httpx.Client
+    real_client = httpx2.Client
     monkeypatch.setattr(
-        client_module.httpx,
+        client_module.httpx2,
         "Client",
-        partial(real_client, transport=httpx.MockTransport(fake.handler)),
+        partial(real_client, transport=httpx2.MockTransport(fake.handler)),
     )
     return fake
 
@@ -117,7 +117,7 @@ def test_log_drops_events_when_queue_is_full(server: FakeServer) -> None:
 
 def test_flush_survives_server_down(server: FakeServer) -> None:
     watch = make_watch()
-    server.responses.append(httpx.ConnectError("connection refused"))
+    server.responses.append(httpx2.ConnectError("connection refused"))
     watch.log(event(1))
 
     watch.flush()  # must not raise
@@ -127,7 +127,7 @@ def test_flush_survives_server_down(server: FakeServer) -> None:
 
 def test_flush_survives_server_error_response(server: FakeServer) -> None:
     watch = make_watch()
-    server.responses.append(httpx.Response(500))
+    server.responses.append(httpx2.Response(500))
     watch.log(event(1))
 
     watch.flush()  # must not raise
@@ -136,11 +136,11 @@ def test_flush_survives_server_error_response(server: FakeServer) -> None:
 @pytest.mark.xfail(strict=True, reason="Phase 10: retry failed batches")
 @pytest.mark.parametrize(
     "failure",
-    [httpx.ConnectError("connection refused"), httpx.Response(500)],
+    [httpx2.ConnectError("connection refused"), httpx2.Response(500)],
     ids=["server-down", "server-500"],
 )
 def test_failed_batch_is_delivered_once_server_recovers(
-    server: FakeServer, failure: httpx.Response | Exception
+    server: FakeServer, failure: httpx2.Response | Exception
 ) -> None:
     watch = make_watch()
     server.responses.append(failure)
