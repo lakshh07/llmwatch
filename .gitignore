@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# scraps files (e.g., temporary scripts, experiments, or code snippets)
+/scraps
