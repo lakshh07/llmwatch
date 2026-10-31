@@ -85,7 +85,6 @@ def test_flush_caps_request_at_batch_size(server: FakeServer) -> None:
     assert server.batches()[0] == [event(n) for n in range(50)]
 
 
-@pytest.mark.xfail(strict=True, reason="flush() sends only one batch per call")
 def test_flush_sends_every_queued_event(server: FakeServer) -> None:
     watch = make_watch(batch_size=50)
     for n in range(120):
@@ -123,6 +122,20 @@ def test_flush_survives_server_down(server: FakeServer) -> None:
     watch.flush()  # must not raise
 
     assert len(server.requests) == 1
+
+
+def test_flush_does_not_hang_when_server_down(server: FakeServer) -> None:
+    watch = make_watch()
+
+    for n in range(120):
+        watch.log(event(n))
+
+    for _ in range(3):
+        server.responses.append(httpx2.ConnectError("connection refused"))
+
+    watch.flush()  # must not hang
+
+    assert len(server.requests) == 3
 
 
 def test_flush_survives_server_error_response(server: FakeServer) -> None:

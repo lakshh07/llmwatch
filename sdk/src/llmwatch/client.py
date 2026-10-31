@@ -10,7 +10,7 @@ class LLMWatch:
     def __init__(
         self,
         api_key: str,
-        host: str = "https://localhost:8000",
+        host: str = "http://localhost:8000",
         batch_size: int = 50,
         flush_interval: float = 2.0,
     ) -> None:
@@ -35,14 +35,15 @@ class LLMWatch:
             self.flush()
 
     def flush(self) -> None:
-        batch = []
-        while len(batch) < self.batch_size:
-            try:
-                batch.append(self.queue.get_nowait())
-            except queue.Empty:
-                break
-        if batch:
-            try:
-                self.http.post("/v1/ingest", json={"events": batch})
-            except httpx2.HTTPError:
-                pass  # Drop the batch if the request fails, not crashing the user main app
+        while not self.queue.empty():
+            batch: list[dict] = []
+            while len(batch) < self.batch_size:
+                try:
+                    batch.append(self.queue.get_nowait())
+                except queue.Empty:
+                    break
+            if batch:
+                try:
+                    self.http.post("/v1/ingest", json={"events": batch})
+                except httpx2.HTTPError:
+                    pass  # Drop the batch if the request fails, not crashing the user main app
