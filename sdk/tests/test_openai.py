@@ -86,3 +86,19 @@ def test_records_error_and_reraises():
     assert event["model"] == "gpt-4o"
     assert "latency" in event
     assert "output" not in event
+
+
+def test_streaming_call_does_not_crash_user_app():
+    client = FakeOpenAIClient(response=["streamed chunk 1", "streamed chunk 2"])
+    watch = FakeLLMWatch()
+
+    res = wrap_openai(client, watch).chat.completions.create(
+        model="gpt-4o", messages=MESSAGES, stream=True
+    )
+
+    assert res is client.response
+    assert client.calls == [{"model": "gpt-4o", "messages": MESSAGES, "stream": True}]
+    assert len(watch.events) == 1
+    event = watch.events[0]
+    assert event["status"] == "ok"
+    assert "parse_error" in event

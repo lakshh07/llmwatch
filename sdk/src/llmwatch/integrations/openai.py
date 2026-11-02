@@ -16,18 +16,24 @@ def wrap_openai(client, watch):
         }
 
         try:
-            res = original(*args, **kwargs)
-            event.update(
-                status="ok",
-                output=res.choices[0].message.content,
-                input_tokens=res.usage.prompt_tokens,
-                output_tokens=res.usage.completion_tokens,
-            )
+            try:
+                res = original(*args, **kwargs)
+            except Exception as e:
+                # If the original call raises an exception, we still want to log it
+                event.update(status="error", error=str(e))
+                raise  # Re-raise the exception after logging it
 
+            try:
+                event.update(
+                    output=res.choices[0].message.content,
+                    input_tokens=res.usage.prompt_tokens,
+                    output_tokens=res.usage.completion_tokens,
+                )
+            except (AttributeError, IndexError) as e:
+                event["parse_error"] = str(e)
+
+            event.update(status="ok")
             return res
-        except Exception as e:
-            event.update(status="error", error=str(e))
-            raise  # Re-raise the exception after logging it, users' error
         finally:
             event["latency"] = round((time.perf_counter() - start) * 1000)
             event["end_time"] = time.time()
