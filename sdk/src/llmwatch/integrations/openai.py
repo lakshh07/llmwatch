@@ -29,7 +29,7 @@ def wrap_openai(client, watch):
                     input_tokens=res.usage.prompt_tokens,
                     output_tokens=res.usage.completion_tokens,
                 )
-            except (AttributeError, IndexError) as e:
+            except (AttributeError, IndexError, TypeError) as e:
                 event["parse_error"] = str(e)
 
             event.update(status="ok")
