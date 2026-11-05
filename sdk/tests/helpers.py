@@ -89,3 +89,28 @@ def fake_anthropic_response(
             output_tokens=output_tokens,
         ),
     )
+
+
+def fake_anthropic_stream():
+    response = ["hello", " world", " this", " is", " a", " test"]
+    events: list[SimpleNamespace] = [
+        SimpleNamespace(
+            type="message_start",
+            message=SimpleNamespace(usage=SimpleNamespace(input_tokens=10)),
+        )
+    ]
+    for word in response:
+        events.append(
+            SimpleNamespace(
+                type="content_block_delta", delta=SimpleNamespace(text=word)
+            )
+        )
+
+    events.append(
+        SimpleNamespace(
+            type="message_delta", usage=SimpleNamespace(output_tokens=len(response))
+        )
+    )
+    events.append(SimpleNamespace(type="message_stop"))
+
+    return events

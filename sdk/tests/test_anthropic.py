@@ -7,6 +7,7 @@ from tests.helpers import (
     FakeAnthropicClient,
     FakeLLMWatch,
     fake_anthropic_response,
+    fake_anthropic_stream,
 )
 
 MODEL = "claude-opus-5-5"
@@ -85,20 +86,21 @@ def test_records_error_and_reraises():
     assert "output" not in event
 
 
-def test_streaming_call_does_not_crash_user_app():
-    client = FakeAnthropicClient(response=["Hello", "world"])
+def test_records_streaming_output():
+    client = FakeAnthropicClient(response=fake_anthropic_stream())
     watch = FakeLLMWatch()
 
-    # Simulate a streaming call by passing a callback function
-    def stream_callback(chunk):
-        pass  # User's callback does nothing
-
-    wrap_anthropic(client, watch).messages.create(
-        model=MODEL, messages=MESSAGES, stream=True, callback=stream_callback
+    res = wrap_anthropic(client, watch).messages.create(
+        model=MODEL, messages=MESSAGES, stream=True
     )
 
+    assert len(watch.events) == 0
+    list(res)
     assert len(watch.events) == 1
 
     event = watch.events[0]
     assert event["status"] == "ok"
-    assert "parse_error" in event
+    assert event["output"] == "hello world this is a test"
+    assert event["input_tokens"] == 10
+    assert event["output_tokens"] == 6
+    assert "ttft" in event

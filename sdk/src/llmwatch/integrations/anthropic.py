@@ -2,6 +2,31 @@ import time
 import uuid
 
 
+def _watch_stream(stream, event, start, watch):
+    pieces: list[str] = []
+
+    try:
+        for block in stream:
+            if block.type == "message_start":
+                event["input_tokens"] = getattr(
+                    block.message.usage, "input_tokens", None
+                )
+            elif block.type == "content_block_delta":
+                if not pieces:  # bonus: first text piece = time to first token
+                    event["ttft"] = round((time.perf_counter() - start) * 1000)
+                pieces.append(getattr(block.delta, "text", ""))
+            elif block.type == "message_delta":
+                event["output_tokens"] = getattr(block.usage, "output_tokens", None)
+            elif block.type == "message_stop":
+                event.update(status="ok")
+            yield block
+    finally:
+        event["output"] = "".join(pieces)
+        event["latency"] = round((time.perf_counter() - start) * 1000)
+        event["end_time"] = time.time()
+        watch.log(event)
+
+
 def wrap_anthropic(client, watch):
     original = client.messages.create
 
@@ -16,11 +41,16 @@ def wrap_anthropic(client, watch):
                 "messages": kwargs.get("messages"),
             },
             "start_time": time.time(),
+            "status": "incomplete",
         }
 
+        starting = False
         try:
             try:
                 res = original(*args, **kwargs)
+                if kwargs.get("stream"):
+                    starting = True
+                    return _watch_stream(res, event, start, watch)
             except Exception as e:
                 # If the original call raises an exception, we still want to log it
                 event.update(status="error", error=str(e))
@@ -42,9 +72,10 @@ def wrap_anthropic(client, watch):
             event.update(status="ok")
             return res
         finally:
-            event["latency"] = round((time.perf_counter() - start) * 1000)
-            event["end_time"] = time.time()
-            watch.log(event)
+            if not starting:
+                event["latency"] = round((time.perf_counter() - start) * 1000)
+                event["end_time"] = time.time()
+                watch.log(event)
 
     client.messages.create = create
     return client
