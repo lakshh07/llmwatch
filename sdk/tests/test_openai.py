@@ -1,7 +1,12 @@
 import pytest
 from llmwatch import wrap_openai
 
-from tests.helpers import FakeLLMWatch, FakeOpenAIClient, fake_openai_response
+from tests.helpers import (
+    FakeLLMWatch,
+    FakeOpenAIClient,
+    fake_openai_response,
+    fake_openai_stream,
+)
 
 MESSAGES = [{"role": "user", "content": "Hello"}]
 
@@ -88,17 +93,58 @@ def test_records_error_and_reraises():
     assert "output" not in event
 
 
-def test_streaming_call_does_not_crash_user_app():
-    client = FakeOpenAIClient(response=["streamed chunk 1", "streamed chunk 2"])
+def test_records_streaming_output():
+    chunks = fake_openai_stream()
+    client = FakeOpenAIClient(response=chunks)
     watch = FakeLLMWatch()
 
     res = wrap_openai(client, watch).chat.completions.create(
         model="gpt-4o", messages=MESSAGES, stream=True
     )
 
-    assert res is client.response
-    assert client.calls == [{"model": "gpt-4o", "messages": MESSAGES, "stream": True}]
+    assert len(watch.events) == 0
+    received = list(res)
     assert len(watch.events) == 1
+
+    assert received == chunks[:-1]
+
     event = watch.events[0]
     assert event["status"] == "ok"
-    assert "parse_error" in event
+    assert event["output"] == "hello world this is a test"
+    assert event["input_tokens"] == 10
+    assert event["output_tokens"] == 6
+    assert "ttft" in event
+
+    assert "parse_error" not in event
+
+    assert client.calls[0]["stream_options"] == {"include_usage": True}
+
+
+def test_streaming_with_user_wants_usage():
+    chunks = fake_openai_stream()
+    client = FakeOpenAIClient(response=chunks)
+    watch = FakeLLMWatch()
+
+    res = wrap_openai(client, watch).chat.completions.create(
+        model="gpt-4o",
+        messages=MESSAGES,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+
+    assert len(watch.events) == 0
+    received = list(res)
+    assert len(watch.events) == 1
+
+    assert received == chunks
+
+    event = watch.events[0]
+    assert event["status"] == "ok"
+    assert event["output"] == "hello world this is a test"
+    assert event["input_tokens"] == 10
+    assert event["output_tokens"] == 6
+    assert "ttft" in event
+
+    assert "parse_error" not in event
+
+    assert client.calls[0]["stream_options"] == {"include_usage": True}

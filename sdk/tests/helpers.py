@@ -54,6 +54,49 @@ def fake_openai_response(
     )
 
 
+def fake_openai_stream():
+    response = ["hello", " world", " this", " is", " a", " test"]
+    chunks: list[SimpleNamespace] = [
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(delta=SimpleNamespace(content=None), finish_reason=None)
+            ],
+            usage=None,
+        ),
+    ]
+    for word in response:
+        chunks.append(
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content=word), finish_reason=None
+                    )
+                ],
+                usage=None,
+            ),
+        )
+
+    chunks.append(
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content=None), finish_reason="stop"
+                )
+            ],
+            usage=None,
+        ),
+    )
+
+    chunks.append(
+        SimpleNamespace(
+            choices=[],
+            usage=SimpleNamespace(prompt_tokens=10, completion_tokens=len(response)),
+        )
+    )
+
+    return chunks
+
+
 class FakeAnthropicClient:
     def __init__(
         self,
