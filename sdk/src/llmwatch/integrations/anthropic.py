@@ -19,22 +19,28 @@ def wrap_anthropic(client, watch):
         }
 
         try:
-            res = original(*args, **kwargs)
+            try:
+                res = original(*args, **kwargs)
+            except Exception as e:
+                # If the original call raises an exception, we still want to log it
+                event.update(status="error", error=str(e))
+                raise  # Re-raise the exception after logging it
 
-            output = "\n".join(
-                block.text for block in res.content if block.type == "text"
-            )
+            try:
+                output = "\n".join(
+                    block.text for block in res.content if block.type == "text"
+                )
 
-            event.update(
-                status="ok",
-                output=output,
-                input_tokens=res.usage.input_tokens,
-                output_tokens=res.usage.output_tokens,
-            )
+                event.update(
+                    output=output,
+                    input_tokens=res.usage.input_tokens,
+                    output_tokens=res.usage.output_tokens,
+                )
+            except (AttributeError, IndexError, TypeError) as e:
+                event["parse_error"] = str(e)
+
+            event.update(status="ok")
             return res
-        except Exception as e:
-            event.update(status="error", error=str(e))
-            raise  # Re-raise the exception after logging it, users' error
         finally:
             event["latency"] = round((time.perf_counter() - start) * 1000)
             event["end_time"] = time.time()

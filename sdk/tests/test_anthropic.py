@@ -83,3 +83,22 @@ def test_records_error_and_reraises():
     assert event["model"] == MODEL
     assert "latency" in event
     assert "output" not in event
+
+
+def test_streaming_call_does_not_crash_user_app():
+    client = FakeAnthropicClient(response=["Hello", "world"])
+    watch = FakeLLMWatch()
+
+    # Simulate a streaming call by passing a callback function
+    def stream_callback(chunk):
+        pass  # User's callback does nothing
+
+    wrap_anthropic(client, watch).messages.create(
+        model=MODEL, messages=MESSAGES, stream=True, callback=stream_callback
+    )
+
+    assert len(watch.events) == 1
+
+    event = watch.events[0]
+    assert event["status"] == "ok"
+    assert "parse_error" in event
