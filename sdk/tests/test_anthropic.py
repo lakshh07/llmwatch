@@ -104,3 +104,5 @@ def test_records_streaming_output():
     assert event["input_tokens"] == 10
     assert event["output_tokens"] == 6
     assert "ttft" in event
+
+    assert "parse_error" not in event

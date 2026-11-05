@@ -44,12 +44,12 @@ def wrap_anthropic(client, watch):
             "status": "incomplete",
         }
 
-        starting = False
+        streaming = False
         try:
             try:
                 res = original(*args, **kwargs)
                 if kwargs.get("stream"):
-                    starting = True
+                    streaming = True
                     return _watch_stream(res, event, start, watch)
             except Exception as e:
                 # If the original call raises an exception, we still want to log it
@@ -72,7 +72,7 @@ def wrap_anthropic(client, watch):
             event.update(status="ok")
             return res
         finally:
-            if not starting:
+            if not streaming:
                 event["latency"] = round((time.perf_counter() - start) * 1000)
                 event["end_time"] = time.time()
                 watch.log(event)
