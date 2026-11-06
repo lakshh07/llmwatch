@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
-from llmwatch_server.app import create_app
+
+AUTH = {"Authorization": "Bearer test-key"}
 
 
 def make_event(**overrides):
@@ -18,11 +19,10 @@ def make_event(**overrides):
     return event
 
 
-def test_ingest_accepts_events() -> None:
-    client = TestClient(create_app())
-
+def test_ingest_accepts_events(client: TestClient) -> None:
     res = client.post(
         "/v1/ingest",
+        headers=AUTH,
         json={"events": [make_event()]},
     )
 
@@ -30,26 +30,53 @@ def test_ingest_accepts_events() -> None:
     assert res.json() == {"accepted": 1}
 
 
-def test_ingest_rejects_event_missing_required_field() -> None:
-    client = TestClient(create_app())
-
+def test_ingest_rejects_event_missing_required_field(client: TestClient) -> None:
     event = make_event()
     del event["id"]
 
     res = client.post(
         "/v1/ingest",
+        headers=AUTH,
         json={"events": [event]},
     )
 
     assert res.status_code == 422
 
 
-def test_ingest_rejects_unknown_status() -> None:
-    client = TestClient(create_app())
-
+def test_ingest_rejects_unknown_status(client: TestClient) -> None:
     res = client.post(
         "/v1/ingest",
+        headers=AUTH,
         json={"events": [make_event(status="unknown")]},
     )
 
     assert res.status_code == 422
+
+
+def test_ingest_rejects_invalid_api_key(client: TestClient) -> None:
+    res = client.post(
+        "/v1/ingest",
+        headers={"Authorization": "Bearer invalid-key"},
+        json={"events": [make_event()]},
+    )
+
+    assert res.status_code == 401
+
+
+def test_ingest_rejects_missing_api_key(client: TestClient) -> None:
+    res = client.post(
+        "/v1/ingest",
+        json={"events": [make_event()]},
+    )
+
+    assert res.status_code == 401
+
+
+def test_ingest_rejects_invalid_api_key_format(client: TestClient) -> None:
+    res = client.post(
+        "/v1/ingest",
+        headers={"Authorization": "InvalidFormat test-key"},
+        json={"events": [make_event()]},
+    )
+
+    assert res.status_code == 401
