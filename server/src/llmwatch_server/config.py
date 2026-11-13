@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="LLMWATCH_", env_file=".env")
 
     database_url: str
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://localhost:6379"
     stream_name: str = "llmwatch:events"
     stream_maxlen: int = 1_000_000
     api_key: str
