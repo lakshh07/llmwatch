@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
 
 from .config import get_settings
-from .db import EventRow, get_engine
+from .db import EventRow, create_tables, get_engine
 from .models import Event
 from .redis_client import get_redis
 
@@ -46,6 +46,9 @@ def run() -> None:
     stream = settings.stream_name
     group = settings.consumer_group
     consumer = socket.gethostname()
+
+    # Create the database tables if they don't exist
+    create_tables()
 
     ensure_group(r, stream, group)
     print(
