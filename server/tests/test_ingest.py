@@ -1,24 +1,8 @@
-from conftest import FakeRedis, FakeRedisWithError
+from conftest import FakeRedis, FakeRedisWithError, make_event
 from fastapi.testclient import TestClient
 from llmwatch_server.models import Event
 
 AUTH = {"Authorization": "Bearer test-key"}
-
-
-def make_event(**overrides):
-    event = {
-        "id": "123",
-        "type": "generation",
-        "model": "gpt-4",
-        "input": [{"role": "user", "content": "Hello"}],
-        "output": "Hello! How can I assist you today?",
-        "status": "ok",
-        "start_time": 1690000000.0,
-        "end_time": 1690000001.0,
-        "latency": 1000,
-    }
-    event.update(overrides)
-    return event
 
 
 def test_ingest_accepts_events(client: TestClient, fake_redis: FakeRedis) -> None:

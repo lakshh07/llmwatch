@@ -43,3 +43,19 @@ def client(fake_redis: FakeRedis) -> TestClient:
     }
 
     return TestClient(app)
+
+
+def make_event(**overrides):
+    event = {
+        "id": "123",
+        "type": "generation",
+        "model": "gpt-4",
+        "input": [{"role": "user", "content": "Hello"}],
+        "output": "Hello! How can I assist you today?",
+        "status": "ok",
+        "start_time": 1690000000.0,
+        "end_time": 1690000001.0,
+        "latency": 1000,
+    }
+    event.update(overrides)
+    return event

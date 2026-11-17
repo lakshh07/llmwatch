@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     stream_name: str = "llmwatch:events"
     stream_maxlen: int = 1_000_000
+    consumer_group: str = "llmwatch-workers"
     api_key: str
 
 
