@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from .config import get_settings
 from .db import EventRow, create_tables, get_engine
 from .models import Event
+from .pricing import compute_cost
 from .redis_client import get_redis
 
 Message = tuple[str, dict[str, str]]
@@ -34,7 +35,14 @@ def parse_messages(
         except (KeyError, ValidationError) as e:
             print(f"Failed to parse message (bad message) {msg_id}: {e}")
             continue
-        rows.append(event.model_dump())
+        rows.append(
+            {
+                **event.model_dump(),
+                "cost": compute_cost(
+                    event.model, event.input_tokens, event.output_tokens
+                ),
+            }
+        )
 
     return rows, ids
 

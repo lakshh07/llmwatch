@@ -18,6 +18,7 @@ class EventRow(Base):
     id: Mapped[str] = mapped_column(primary_key=True)
     type: Mapped[str]
     model: Mapped[str | None]
+    cost: Mapped[float | None]
     input: Mapped[Any | None] = mapped_column(JSONB)
     output: Mapped[str | None]
     start_time: Mapped[float]
