@@ -222,3 +222,7 @@ __marimo__/
 
 # scraps files (e.g., temporary scripts, experiments, or code snippets)
 /scraps
+
+#ai
+.agents
+.claude
