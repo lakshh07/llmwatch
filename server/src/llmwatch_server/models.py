@@ -26,6 +26,7 @@ class IngestRequest(BaseModel):
 
 class EventOut(Event):
     cost: float | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -41,3 +42,18 @@ class StatsOut(BaseModel):
     avg_latency: float
     error_count: int
     by_model: list[ModelStats]
+
+
+class ScoreIn(BaseModel):
+    name: str
+    value: float = Field(ge=0, le=1)
+    source: Literal["human", "model", "heuristic"]
+    comment: str | None = None
+
+
+class ScoreOut(ScoreIn):
+    id: int
+    event_id: str
+    created_at: float
+
+    model_config = ConfigDict(from_attributes=True)

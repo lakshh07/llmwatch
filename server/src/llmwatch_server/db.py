@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from functools import lru_cache
 from typing import Any
 
-from sqlalchemy import JSON, Engine, create_engine
+from sqlalchemy import JSON, Engine, ForeignKey, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -33,6 +33,18 @@ class EventRow(Base):
     parse_error: Mapped[str | None]
     input_tokens: Mapped[int | None]
     output_tokens: Mapped[int | None]
+
+
+class ScoreRow(Base):
+    __tablename__ = "scores"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"))
+    name: Mapped[str]
+    value: Mapped[float]
+    source: Mapped[str]
+    comment: Mapped[str | None]
+    created_at: Mapped[float]
 
 
 @lru_cache
