@@ -1,9 +1,10 @@
+from collections.abc import Iterator
 from functools import lru_cache
 from typing import Any
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import JSON, Engine, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from .config import get_settings
 
@@ -19,7 +20,9 @@ class EventRow(Base):
     type: Mapped[str]
     model: Mapped[str | None]
     cost: Mapped[float | None]
-    input: Mapped[Any | None] = mapped_column(JSONB)
+    input: Mapped[Any | None] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql")
+    )
     output: Mapped[str | None]
     start_time: Mapped[float]
     end_time: Mapped[float]
@@ -40,3 +43,8 @@ def get_engine() -> Engine:
 
 def create_tables() -> None:
     Base.metadata.create_all(get_engine())
+
+
+def get_session() -> Iterator[Session]:
+    with Session(get_engine()) as session:
+        yield session

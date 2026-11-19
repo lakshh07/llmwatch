@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Event(BaseModel):
@@ -22,3 +22,8 @@ class Event(BaseModel):
 
 class IngestRequest(BaseModel):
     events: list[Event]
+
+
+class EventOut(Event):
+    cost: float | None = None
+    model_config = ConfigDict(from_attributes=True)
