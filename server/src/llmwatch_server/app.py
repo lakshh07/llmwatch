@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI
 
 from .auth import require_api_key
-from .routes import events, health, ingest
+from .routes import events, health, ingest, stats
 
 
 def create_app() -> FastAPI:
@@ -17,6 +17,12 @@ def create_app() -> FastAPI:
         events.router,
         prefix="/v1",
         tags=["Events"],
+        dependencies=[Depends(require_api_key)],
+    )
+    app.include_router(
+        stats.router,
+        prefix="/v1",
+        tags=["Stats"],
         dependencies=[Depends(require_api_key)],
     )
     return app

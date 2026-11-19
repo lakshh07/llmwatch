@@ -27,3 +27,17 @@ class IngestRequest(BaseModel):
 class EventOut(Event):
     cost: float | None = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class ModelStats(BaseModel):
+    model: str | None
+    events: int
+    cost: float
+
+
+class StatsOut(BaseModel):
+    total_events: int
+    total_cost: float
+    avg_latency: float
+    error_count: int
+    by_model: list[ModelStats]
