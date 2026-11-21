@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.15"
 dependencies = [
+    "alembic>=1.20.1",
     "anthropic>=2.12.0",
     "fastapi>=0.161.1",
     "httpx2>=2.16.0",
@@ -20,6 +21,9 @@ dependencies = [
 
 [project.scripts]
 llmwatch-server = "llmwatch_server:main"
+llmwatch-migrate = "llmwatch_server.migrate:main"
+llmwatch-worker = "llmwatch_server.worker:run"
+llmwatch-alerter = "llmwatch_server.alerter:run"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]

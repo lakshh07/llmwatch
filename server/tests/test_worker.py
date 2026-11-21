@@ -113,7 +113,7 @@ def test_worker_judges_new_events_after_event_transaction(monkeypatch, capsys) -
     )
     monkeypatch.setattr(worker, "get_redis", lambda: redis_client)
     monkeypatch.setattr(worker, "get_engine", lambda: engine)
-    monkeypatch.setattr(worker, "create_tables", lambda: None)
+    monkeypatch.setattr(worker, "check_schema", lambda: None)
     monkeypatch.setattr(worker, "get_anthropic", object)
     monkeypatch.setattr(worker, "judge_event", fake_judge)
 

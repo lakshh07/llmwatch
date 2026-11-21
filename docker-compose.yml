@@ -1,3 +1,29 @@
+# `docker compose up -d`                  -> just Postgres + Redis (for local dev)
+# `docker compose --profile app up --build` -> the whole stack in containers
+#
+# The app services read LLMWATCH_API_KEY (and optional judge settings) from .env.
+
+x-server: &server
+  build:
+    context: .
+    target: server
+  image: llmwatch-server
+  profiles: ["app"]
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    # Inside Docker the databases are reached by service name, not localhost.
+    LLMWATCH_DATABASE_URL: postgresql+psycopg://llmwatch:llmwatch@postgres:5432/llmwatch
+    LLMWATCH_REDIS_URL: redis://redis:6379
+    LLMWATCH_API_KEY: ${LLMWATCH_API_KEY:?Set LLMWATCH_API_KEY in .env}
+  depends_on: &after-migrate
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_started
+
 services:
   redis:
     image: redis:7-alpine
@@ -30,6 +56,53 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Runs once, brings the schema up to date, then exits.
+  migrate:
+    <<: *server
+    restart: "no"
+    command: ["llmwatch-migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *server
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    <<: *server
+    command: ["llmwatch-worker"]
+
+  alerter:
+    <<: *server
+    command: ["llmwatch-alerter"]
+
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+    image: llmwatch-dashboard
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      LLMWATCH_API_URL: http://api:8000
+      LLMWATCH_API_KEY: ${LLMWATCH_API_KEY:?Set LLMWATCH_API_KEY in .env}
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   redis_data:

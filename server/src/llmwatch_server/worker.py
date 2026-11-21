@@ -6,9 +6,10 @@ from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
 
 from .config import get_settings
-from .db import EventRow, ScoreRow, create_tables, get_engine
+from .db import EventRow, ScoreRow, get_engine
 from .evaluators import run_rules
 from .judge import get_anthropic, judge_event
+from .migrate import check_schema
 from .models import Event
 from .pricing import compute_cost
 from .redis_client import get_redis
@@ -57,8 +58,7 @@ def run() -> None:
     group = settings.consumer_group
     consumer = socket.gethostname()
 
-    # Create the database tables if they don't exist
-    create_tables()
+    check_schema()
 
     ensure_group(r, stream, group)
     print(
