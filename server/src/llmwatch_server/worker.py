@@ -6,7 +6,8 @@ from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert
 
 from .config import get_settings
-from .db import EventRow, create_tables, get_engine
+from .db import EventRow, ScoreRow, create_tables, get_engine
+from .evaluators import run_rules
 from .models import Event
 from .pricing import compute_cost
 from .redis_client import get_redis
@@ -73,18 +74,28 @@ def run() -> None:
         _stream_name, messages = response[0]
         rows, ids = parse_messages(messages)
 
+        scores: list[dict[str, Any]] = []
         if rows:
             stmt = (
                 insert(EventRow)
                 .values(rows)
                 .on_conflict_do_nothing(index_elements=["id"])
+                .returning(EventRow.id)
             )
             with engine.begin() as conn:
-                conn.execute(stmt)
+                # Duplicates skipped by ON CONFLICT are not returned, so only
+                # brand-new events get scored (no double scores on replay).
+                inserted = set(conn.execute(stmt).scalars().all())
+                for row in rows:
+                    if row["id"] in inserted:
+                        scores.extend(run_rules(row))
+                if scores:
+                    conn.execute(insert(ScoreRow).values(scores))
 
         r.xack(stream, group, *ids)
         print(
-            f"Worker {consumer} processed {len(rows)} events and acknowledged {len(ids)} messages"
+            f"Worker {consumer} processed {len(rows)} events, saved {len(scores)} "
+            f"scores and acknowledged {len(ids)} messages"
         )
 
 
