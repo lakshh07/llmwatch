@@ -1,0 +1,5 @@
+# Streamlit reads this when started from the repo root (and in Docker, from /app).
+
+[client]
+# Hide Streamlit's own developer toolbar (Deploy, Rerun, Clear cache).
+toolbarMode = "minimal"

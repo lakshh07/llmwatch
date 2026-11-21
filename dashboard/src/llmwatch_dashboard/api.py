@@ -8,6 +8,10 @@ def _base_url() -> str:
     return os.environ.get("LLMWATCH_API_URL", "http://localhost:8000")
 
 
+def has_api_key() -> bool:
+    return bool(os.environ.get("LLMWATCH_API_KEY"))
+
+
 def _headers() -> dict[str, str]:
     api_key = os.environ.get("LLMWATCH_API_KEY", "")
     return {"Authorization": f"Bearer {api_key}"}

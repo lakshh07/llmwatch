@@ -46,11 +46,44 @@ def remove_alert(rule_id: int) -> None:
     load_alerts.clear()
 
 
+def metric_label(rule: dict[str, Any]) -> str:
+    if rule["metric"] == "avg_score":
+        return f"avg {rule['score_name']}"
+    return rule["metric"].replace("_", " ")
+
+
+def fmt_metric(metric: str, value: float | None) -> str:
+    """Show each metric in its natural unit: 21.7%, 1702 ms, $0.1750."""
+    if value is None:
+        return "no data"
+    if metric in ("error_rate", "avg_score"):
+        return f"{value:.1%}"
+    if metric == "avg_latency":
+        return f"{value:,.0f} ms"
+    return f"${value:.4f}"
+
+
+def describe_rule(rule: dict[str, Any]) -> str:
+    return (
+        f"{metric_label(rule)} {rule['op']} "
+        f"{fmt_metric(rule['metric'], rule['threshold'])} "
+        f"(last {rule['window_minutes']} min)"
+    )
+
+
 st.set_page_config(page_title="LLMWatch", layout="wide")
 st.title("LLMWatch")
 
 if st.sidebar.button("Refresh"):
     st.cache_data.clear()
+
+if not api.has_api_key():
+    st.error(
+        "Start the dashboard with your .env loaded:\n\n"
+        "`uv run --env-file .env streamlit run dashboard/src/llmwatch_dashboard/app.py`",
+        title="LLMWATCH_API_KEY is not set",
+    )
+    st.stop()
 
 try:
     stats = load_stats()
@@ -80,8 +113,9 @@ except httpx.HTTPError:
 for rule in alerts:
     if rule["firing"]:
         st.error(
-            f"{rule['metric']} is {rule['last_value']:.4g} "
-            f"({rule['op']} {rule['threshold']:g}, last {rule['window_minutes']} min)",
+            f"{metric_label(rule).capitalize()} is "
+            f"{fmt_metric(rule['metric'], rule['last_value'])}. "
+            f"Rule: {describe_rule(rule)}.",
             title=f"Alert firing: {rule['name']}",
             icon=":material/notifications_active:",
         )
@@ -217,11 +251,8 @@ with alerts_tab:
                     "id": r["id"],
                     "name": r["name"],
                     "status": "🔴 firing" if r["firing"] else "✅ ok",
-                    "rule": (
-                        f"{r['score_name'] or r['metric']} {r['op']} "
-                        f"{r['threshold']:g} (last {r['window_minutes']} min)"
-                    ),
-                    "last value": r["last_value"],
+                    "rule": describe_rule(r),
+                    "last value": fmt_metric(r["metric"], r["last_value"]),
                     "last checked": fmt_time(r["last_checked_at"]),
                     "last fired": fmt_time(r["last_fired_at"]),
                     "webhook": bool(r["webhook_url"]),
