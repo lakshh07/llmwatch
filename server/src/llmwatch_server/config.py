@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     stream_maxlen: int = 1_000_000
     consumer_group: str = "llmwatch-workers"
     api_key: str
+    judge_enabled: bool = False
+    judge_model: str = "claude-haiku-5-5"
+    anthropic_api_key: str | None = None
 
 
 @lru_cache

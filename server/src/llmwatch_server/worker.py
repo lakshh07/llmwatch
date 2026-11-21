@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from .config import get_settings
 from .db import EventRow, ScoreRow, create_tables, get_engine
 from .evaluators import run_rules
+from .judge import get_anthropic, judge_event
 from .models import Event
 from .pricing import compute_cost
 from .redis_client import get_redis
@@ -75,6 +76,7 @@ def run() -> None:
         rows, ids = parse_messages(messages)
 
         scores: list[dict[str, Any]] = []
+        judge_scores: list[dict[str, Any]] = []
         if rows:
             stmt = (
                 insert(EventRow)
@@ -86,16 +88,27 @@ def run() -> None:
                 # Duplicates skipped by ON CONFLICT are not returned, so only
                 # brand-new events get scored (no double scores on replay).
                 inserted = set(conn.execute(stmt).scalars().all())
-                for row in rows:
-                    if row["id"] in inserted:
-                        scores.extend(run_rules(row))
+                new_rows = [row for row in rows if row["id"] in inserted]
+                for row in new_rows:
+                    scores.extend(run_rules(row))
                 if scores:
                     conn.execute(insert(ScoreRow).values(scores))
+
+            if settings.judge_enabled and new_rows:
+                client = get_anthropic()
+                for row in new_rows:
+                    score = judge_event(client, row)
+                    if score is not None:
+                        judge_scores.append(score)
+                if judge_scores:
+                    with engine.begin() as conn:
+                        conn.execute(insert(ScoreRow).values(judge_scores))
 
         r.xack(stream, group, *ids)
         print(
             f"Worker {consumer} processed {len(rows)} events, saved {len(scores)} "
-            f"scores and acknowledged {len(ids)} messages"
+            f"scores and {len(judge_scores)} judge scores and acknowledged "
+            f"{len(ids)} messages"
         )
 
 
