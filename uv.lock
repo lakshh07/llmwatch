@@ -414,6 +414,7 @@ source = { editable = "server" }
 dependencies = [
     { name = "anthropic" },
     { name = "fastapi" },
+    { name = "httpx2" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "redis" },
@@ -425,6 +426,7 @@ dependencies = [
 requires-dist = [
     { name = "anthropic", specifier = ">=2.12.0" },
     { name = "fastapi", specifier = ">=0.161.1" },
+    { name = "httpx2", specifier = ">=2.16.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.9" },
     { name = "pydantic-settings", specifier = ">=2.16.1" },
     { name = "redis", specifier = ">=8.1.0" },

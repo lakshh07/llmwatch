@@ -47,6 +47,26 @@ class ScoreRow(Base):
     created_at: Mapped[float]
 
 
+class AlertRuleRow(Base):
+    __tablename__ = "alert_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str]
+    metric: Mapped[str]
+    op: Mapped[str]
+    threshold: Mapped[float]
+    window_minutes: Mapped[int]
+    score_name: Mapped[str | None]
+    webhook_url: Mapped[str | None]
+    enabled: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[float]
+    # Written by the alerter on every check:
+    firing: Mapped[bool] = mapped_column(default=False)
+    last_value: Mapped[float | None]
+    last_checked_at: Mapped[float | None]
+    last_fired_at: Mapped[float | None]
+
+
 @lru_cache
 def get_engine() -> Engine:
     settings = get_settings()

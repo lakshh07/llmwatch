@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     judge_enabled: bool = False
     judge_model: str = "claude-haiku-5-5"
     anthropic_api_key: str | None = None
+    alert_interval_seconds: int = 60
 
 
 @lru_cache

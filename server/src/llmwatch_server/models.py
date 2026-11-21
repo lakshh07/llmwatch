@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Event(BaseModel):
@@ -63,5 +63,34 @@ class ScoreOut(ScoreIn):
     id: int
     event_id: str
     created_at: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AlertRuleIn(BaseModel):
+    name: str
+    metric: Literal["error_rate", "avg_latency", "total_cost", "avg_score"]
+    op: Literal["above", "below"]
+    threshold: float
+    window_minutes: int = Field(60, ge=1, le=1440)
+    score_name: str | None = None
+    webhook_url: str | None = None
+
+    @model_validator(mode="after")
+    def check_score_name(self) -> "AlertRuleIn":
+        # avg_score needs to know which score to average (e.g. "helpfulness").
+        if self.metric == "avg_score" and not self.score_name:
+            raise ValueError("score_name is required when metric is 'avg_score'")
+        return self
+
+
+class AlertRuleOut(AlertRuleIn):
+    id: int
+    enabled: bool
+    created_at: float
+    firing: bool
+    last_value: float | None
+    last_checked_at: float | None
+    last_fired_at: float | None
 
     model_config = ConfigDict(from_attributes=True)

@@ -55,3 +55,23 @@ def post_feedback(event_id: str, value: float) -> None:
         timeout=5,
     )
     response.raise_for_status()
+
+
+def fetch_alerts() -> list[dict[str, Any]]:
+    response = httpx.get(f"{_base_url()}/v1/alerts", headers=_headers(), timeout=5)
+    response.raise_for_status()
+    return response.json()
+
+
+def create_alert(rule: dict[str, Any]) -> None:
+    response = httpx.post(
+        f"{_base_url()}/v1/alerts", json=rule, headers=_headers(), timeout=5
+    )
+    response.raise_for_status()
+
+
+def delete_alert(rule_id: int) -> None:
+    response = httpx.delete(
+        f"{_base_url()}/v1/alerts/{rule_id}", headers=_headers(), timeout=5
+    )
+    response.raise_for_status()
