@@ -19,6 +19,19 @@ def load_events(limit: int, model: str | None, status: str | None) -> list[dict]
     return api.fetch_events(limit=limit, model=model, status=status)
 
 
+def send_feedback(event_id: str) -> None:
+    # st.feedback "thumbs": 1 = thumbs up, 0 = thumbs down, None = cleared.
+    choice = st.session_state[f"feedback_{event_id}"]
+    if choice is None:
+        return
+    try:
+        api.post_feedback(event_id, float(choice))
+    except httpx.HTTPError:
+        st.session_state.feedback_error = "Couldn't save your feedback."
+        return
+    load_stats.clear()  # so the quality numbers include the new vote
+
+
 st.set_page_config(page_title="LLMWatch", layout="wide")
 st.title("LLMWatch")
 
@@ -58,6 +71,20 @@ if stats["by_model"]:
 else:
     st.info("No events yet.")
 
+# --- Quality (eval scores) -------------------------------------------------
+st.subheader("Quality")
+if stats["scores"]:
+    with st.container(horizontal=True):
+        for score in stats["scores"]:
+            st.metric(
+                f"{score['name']} ({score['source']})",
+                f"{score['avg']:.0%}",
+                help=f"Average of {score['count']} scores",
+                border=True,
+            )
+else:
+    st.info("No scores yet.")
+
 # --- Recent events ---------------------------------------------------------
 st.subheader("Recent events")
 events = load_events(
@@ -78,4 +105,61 @@ rows = [
     }
     for e in events
 ]
-st.dataframe(rows, width="stretch")
+selection = st.dataframe(
+    rows,
+    width="stretch",
+    on_select="rerun",
+    selection_mode="single-row",
+    key="events_table",
+)
+
+# --- Selected event detail -------------------------------------------------
+if not selection.selection.rows:
+    st.caption("Select a row to see its input, output and scores.")
+    st.stop()
+
+event = events[selection.selection.rows[0]]
+st.subheader(f"Event {event['id']}")
+
+left, right = st.columns(2)
+with left:
+    st.markdown("**Input**")
+    st.json(event["input"], expanded=False)
+    st.markdown("**Output**")
+    st.code(event["output"] or "", language=None, wrap_lines=True)
+    if event["error"]:
+        st.error(event["error"], title="Error")
+
+with right:
+    st.markdown("**Scores**")
+    try:
+        scores = api.fetch_scores(event["id"])
+    except httpx.HTTPError:
+        st.error("Couldn't load scores for this event.")
+        scores = []
+    if scores:
+        st.dataframe(
+            [
+                {
+                    "name": s["name"],
+                    "value": s["value"],
+                    "source": s["source"],
+                    "comment": s["comment"],
+                }
+                for s in scores
+            ],
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.caption("No scores for this event yet.")
+
+    st.markdown("**Was this response good?**")
+    st.feedback(
+        "thumbs",
+        key=f"feedback_{event['id']}",
+        on_change=send_feedback,
+        args=(event["id"],),
+    )
+    if error := st.session_state.pop("feedback_error", None):
+        st.error(error)

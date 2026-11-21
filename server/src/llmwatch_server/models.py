@@ -36,12 +36,20 @@ class ModelStats(BaseModel):
     cost: float
 
 
+class ScoreStats(BaseModel):
+    name: str
+    source: str
+    count: int
+    avg: float
+
+
 class StatsOut(BaseModel):
     total_events: int
     total_cost: float
     avg_latency: float
     error_count: int
     by_model: list[ModelStats]
+    scores: list[ScoreStats]
 
 
 class ScoreIn(BaseModel):

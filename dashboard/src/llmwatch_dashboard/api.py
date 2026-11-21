@@ -36,3 +36,22 @@ def fetch_events(
     )
     response.raise_for_status()
     return response.json()
+
+
+def fetch_scores(event_id: str) -> list[dict[str, Any]]:
+    response = httpx.get(
+        f"{_base_url()}/v1/events/{event_id}/scores", headers=_headers(), timeout=5
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def post_feedback(event_id: str, value: float) -> None:
+    """Save a human 👍 (1.0) / 👎 (0.0) as a score on the event."""
+    response = httpx.post(
+        f"{_base_url()}/v1/events/{event_id}/scores",
+        json={"name": "user_feedback", "value": value, "source": "human"},
+        headers=_headers(),
+        timeout=5,
+    )
+    response.raise_for_status()
