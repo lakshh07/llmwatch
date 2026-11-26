@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     stream_name: str = "llmwatch:events"
     stream_maxlen: int = 1_000_000
     consumer_group: str = "llmwatch-workers"
+    dead_letter_stream: str = "llmwatch:dead-letter"
+    # A message pending this long is treated as stuck (its worker died) and
+    # taken over by another worker. Keep it well above a normal batch time.
+    reclaim_idle_ms: int = 60_000
+    max_deliveries: int = 5
+    judge_stream: str = "llmwatch:judge"
+    judge_group: str = "llmwatch-judges"
     api_key: str
     judge_enabled: bool = False
     judge_model: str = "claude-haiku-5-5"

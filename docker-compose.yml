@@ -88,6 +88,14 @@ services:
     <<: *server
     command: ["llmwatch-alerter"]
 
+  # LLM-as-judge, in its own process so slow LLM calls never hold up the
+  # worker. Opt in: `docker compose --profile app --profile judge up`
+  # (and set LLMWATCH_JUDGE_ENABLED=true + LLMWATCH_ANTHROPIC_API_KEY in .env).
+  judge:
+    <<: *server
+    profiles: ["judge"]
+    command: ["llmwatch-judge"]
+
   dashboard:
     build:
       context: .

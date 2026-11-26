@@ -16,7 +16,10 @@ flowchart LR
     api -- XADD --> redis[(Redis stream)]
     redis -- XREADGROUP --> worker[Worker]
     worker -- "events, cost, scores" --> pg[(Postgres)]
-    worker -. "optional judge" .-> claude[Claude API]
+    worker -. "new event ids" .-> jstream[(Judge stream)]
+    jstream -.-> judge[Judge worker]
+    judge -. "helpfulness score" .-> pg
+    judge -.-> claude[Claude API]
     alerter[Alerter] -- "every 60s" --> pg
     alerter -- webhook --> slack[Slack / webhook]
     dashboard[Dashboard · Streamlit] -- "/v1/stats, /v1/events, /v1/alerts" --> api
@@ -24,6 +27,12 @@ flowchart LR
 ```
 
 The API only puts events on a Redis stream and returns `202` straight away, so ingest stays fast even when the database is slow. The worker does the heavier work: it saves events, computes cost, and runs the evaluators. Duplicate events, for example from a replay, are ignored.
+
+Delivery is at-least-once:
+
+- **Crashed workers**: a message is acked only after its events are committed. If a worker dies mid-batch, another worker (or the same one after a restart) takes over its messages once they have been pending for `LLMWATCH_RECLAIM_IDLE_MS`, using `XAUTOCLAIM`.
+- **Bad messages**: messages that can't be parsed, or that have been delivered more than `LLMWATCH_MAX_DELIVERIES` times, go to the `llmwatch:dead-letter` stream with a `reason`, so they don't block the queue. Inspect them with `redis-cli XRANGE llmwatch:dead-letter - +`.
+- **Judge**: the LLM judge runs as its own process (`llmwatch-judge`) reading its own stream, so a slow or down LLM API never delays saving events. It skips events that already have a judge score, so a replay doesn't cost twice.
 
 ## Quick start (Docker)
 
@@ -76,6 +85,7 @@ Then run each part in its own terminal:
 uv run uvicorn llmwatch_server.app:create_app --factory --reload   # API on :8000
 uv run llmwatch-worker                                             # stream -> Postgres
 uv run llmwatch-alerter                                            # alert rules
+uv run llmwatch-judge                                              # optional: LLM judge
 uv run --env-file .env streamlit run dashboard/src/llmwatch_dashboard/app.py   # dashboard on :8501
 ```
 
@@ -109,7 +119,9 @@ All settings are environment variables, read from `.env` in development.
 | `LLMWATCH_API_KEY`                | (required)               | Clients send it as `Authorization: Bearer ...` |
 | `LLMWATCH_REDIS_URL`              | `redis://localhost:6379` |                                                |
 | `LLMWATCH_ALERT_INTERVAL_SECONDS` | `60`                     | How often the alerter checks rules             |
-| `LLMWATCH_JUDGE_ENABLED`          | `false`                  | Score new events with an LLM judge (costs money) |
+| `LLMWATCH_RECLAIM_IDLE_MS`        | `60000`                  | Pending this long = stuck; another worker takes it over |
+| `LLMWATCH_MAX_DELIVERIES`         | `5`                      | Then the message is dead-lettered              |
+| `LLMWATCH_JUDGE_ENABLED`          | `false`                  | Queue new events for `llmwatch-judge` (costs money) |
 | `LLMWATCH_JUDGE_MODEL`            | `claude-haiku-5-5`       |                                                |
 | `LLMWATCH_ANTHROPIC_API_KEY`      | (none)                   | Needed when the judge is enabled               |
 

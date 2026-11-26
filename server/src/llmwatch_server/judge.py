@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from .config import get_settings
 
+JUDGE_SCORE_NAME = "helpfulness"
+JUDGE_SOURCE = "model"
+
 
 class JudgeVerdict(BaseModel):
     score: int = Field(ge=1, le=5)
@@ -62,9 +65,9 @@ def judge_event(client: Anthropic, event: dict[str, Any]) -> dict[str, Any] | No
 
     return {
         "event_id": event["id"],
-        "name": "helpfulness",
+        "name": JUDGE_SCORE_NAME,
         "value": (verdict.score - 1) / 4,
-        "source": "model",
+        "source": JUDGE_SOURCE,
         "comment": verdict.reason,
         "created_at": time(),
     }

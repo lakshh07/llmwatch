@@ -31,6 +31,48 @@ class FakeRedisWithError(FakeRedis):
         raise redis.ConnectionError("Simulated Redis connection error")
 
 
+class FakeStreamRedis:
+    """Just enough of a Redis stream + consumer group for the worker tests."""
+
+    def __init__(self) -> None:
+        self.added: dict[str, list[dict[str, str]]] = {}
+        self.acked: list[str] = []
+        self.to_read: list[list[tuple[str, dict[str, str]]]] = []  # XREADGROUP
+        self.to_claim: list[tuple[str, dict[str, str]]] = []  # XAUTOCLAIM
+        self.deliveries: dict[str, int] = {}  # message id -> times delivered
+        self.calls: list[str] = []
+
+    def pipeline(self) -> "FakeStreamRedis":
+        return self
+
+    def execute(self) -> list[None]:
+        return []
+
+    def xgroup_create(self, *_args, **_kwargs) -> None:
+        self.calls.append("xgroup_create")
+
+    def xadd(self, name: str, fields: dict[str, str], **_kwargs) -> None:
+        self.added.setdefault(name, []).append(fields)
+
+    def xack(self, _name: str, _group: str, *ids: str) -> None:
+        self.acked.extend(ids)
+
+    def xreadgroup(self, *_args, **_kwargs):
+        self.calls.append("xreadgroup")
+        return [("stream", self.to_read.pop(0))] if self.to_read else []
+
+    def xautoclaim(self, *_args, **_kwargs):
+        self.calls.append("xautoclaim")
+        claimed, self.to_claim = self.to_claim, []
+        return ["0-0", claimed, []]
+
+    def xpending_range(self, *_args, **_kwargs) -> list[dict[str, object]]:
+        return [
+            {"message_id": msg_id, "times_delivered": times}
+            for msg_id, times in self.deliveries.items()
+        ]
+
+
 @pytest.fixture
 def fake_redis() -> FakeRedis:
     return FakeRedis()

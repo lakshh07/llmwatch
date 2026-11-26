@@ -2,11 +2,15 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-from conftest import make_event
-from llmwatch_server import worker
-from llmwatch_server.worker import parse_messages
+import redis
+from conftest import FakeStreamRedis, make_event
+from llmwatch_server.config import Settings
+from llmwatch_server.streams import StreamConsumer
+from llmwatch_server.worker import parse_messages, process_batch
+from sqlalchemy import Engine
 
 
 def test_worker_parse_messages() -> None:
@@ -27,99 +31,100 @@ def test_worker_parse_messages() -> None:
         ),
         ("3", {"data": "invalid_json"}),
         ("4", {}),
+        ("5", None),
     ]
 
-    rows, ids = parse_messages(messages)
+    rows, ok_ids, bad = parse_messages(messages)  # type: ignore[arg-type]
 
-    assert len(rows) == 2
-    assert len(ids) == 4
     assert [row["id"] for row in rows] == ["123", "456"]
     assert [row["cost"] for row in rows] == [None, pytest.approx(0.028)]
-    assert ids == ["1", "2", "3", "4"]
+    assert ok_ids == ["1", "2"]
+    assert [msg_id for msg_id, _fields, _reason in bad] == ["3", "4", "5"]
+    assert bad[0][1] == {"data": "invalid_json"}
+    assert "ValidationError" in bad[0][2]
 
 
-def test_worker_judges_new_events_after_event_transaction(monkeypatch, capsys) -> None:
-    class FakeResult:
-        def scalars(self) -> "FakeResult":
-            return self
+class FakeEngine:
+    """Pretends Postgres inserted only the event ids in `new_ids`."""
 
-        def all(self) -> list[str]:
-            return ["123"]
+    def __init__(self, new_ids: list[str]) -> None:
+        self.new_ids = new_ids
+        self.statements = 0
 
-    class FakeEngine:
-        def __init__(self) -> None:
-            self.in_transaction = False
-            self.statement_counts: list[int] = []
+    @contextmanager
+    def begin(self) -> Iterator["FakeEngine"]:
+        yield self
 
-        @contextmanager
-        def begin(self) -> Iterator["FakeConnection"]:
-            self.in_transaction = True
-            self.statement_counts.append(0)
-            try:
-                yield FakeConnection(self)
-            finally:
-                self.in_transaction = False
+    def execute(self, _statement) -> Any:
+        self.statements += 1
+        return SimpleNamespace(
+            scalars=lambda: SimpleNamespace(all=lambda: self.new_ids)
+        )
 
-    class FakeConnection:
-        def __init__(self, engine: FakeEngine) -> None:
-            self.engine = engine
 
-        def execute(self, _statement) -> FakeResult:
-            self.engine.statement_counts[-1] += 1
-            return FakeResult()
-
-    class FakeRedis:
-        def __init__(self) -> None:
-            self.read_count = 0
-
-        def xgroup_create(self, *_args, **_kwargs) -> None:
-            pass
-
-        def xreadgroup(self, *_args, **_kwargs):
-            self.read_count += 1
-            if self.read_count > 1:
-                raise StopIteration
-            messages = [
-                ("1", {"data": json.dumps(make_event())}),
-                ("2", {"data": json.dumps(make_event(id="456"))}),
-            ]
-            return [("stream", messages)]
-
-        def xack(self, *_args) -> None:
-            pass
-
-    engine = FakeEngine()
-    redis_client = FakeRedis()
-    judged_ids: list[str] = []
-
-    def fake_judge(_client, event):
-        assert not engine.in_transaction
-        judged_ids.append(event["id"])
-        return {
-            "event_id": event["id"],
-            "name": "helpfulness",
-            "value": 1.0,
-            "source": "model",
-            "comment": "Helpful",
-            "created_at": 1.0,
-        }
-
-    monkeypatch.setattr(
-        worker,
-        "get_settings",
-        lambda: SimpleNamespace(
-            stream_name="stream", consumer_group="workers", judge_enabled=True
-        ),
+def run_batch(
+    messages: list[tuple[str, dict[str, str]]],
+    new_ids: list[str],
+    judge_enabled: bool,
+) -> tuple[FakeStreamRedis, FakeEngine]:
+    r = FakeStreamRedis()
+    engine = FakeEngine(new_ids)
+    consumer = StreamConsumer(cast(redis.Redis, r), "events", "workers", "w1", "dead")
+    settings = SimpleNamespace(
+        judge_enabled=judge_enabled, judge_stream="judge", stream_maxlen=1000
     )
-    monkeypatch.setattr(worker, "get_redis", lambda: redis_client)
-    monkeypatch.setattr(worker, "get_engine", lambda: engine)
-    monkeypatch.setattr(worker, "check_schema", lambda: None)
-    monkeypatch.setattr(worker, "get_anthropic", object)
-    monkeypatch.setattr(worker, "judge_event", fake_judge)
+    process_batch(
+        messages,
+        r=cast(redis.Redis, r),
+        engine=cast(Engine, engine),
+        consumer=consumer,
+        settings=cast(Settings, settings),
+    )
+    return r, engine
 
-    with pytest.raises(StopIteration):
-        worker.run()
 
-    assert judged_ids == ["123"]
-    assert engine.statement_counts == [2, 1]
-    assert "1 judge scores" in capsys.readouterr().out
+def test_process_batch_dead_letters_bad_messages_and_acks_the_rest() -> None:
+    messages = [
+        ("1", {"data": json.dumps(make_event(id="a"))}),
+        ("2", {"data": "not json"}),
+    ]
+
+    r, _engine = run_batch(messages, new_ids=["a"], judge_enabled=False)
+
+    assert r.added["dead"][0]["original_id"] == "2"
+    assert sorted(r.acked) == ["1", "2"]
+    assert "judge" not in r.added
+
+
+def test_process_batch_queues_only_new_events_for_the_judge() -> None:
+    messages = [
+        ("1", {"data": json.dumps(make_event(id="new"))}),
+        ("2", {"data": json.dumps(make_event(id="duplicate"))}),
+    ]
+
+    r, engine = run_batch(messages, new_ids=["new"], judge_enabled=True)
+
+    assert r.added["judge"] == [{"event_id": "new"}]
+    assert r.acked == ["1", "2"]
+    assert engine.statements == 2  # events insert + rule scores insert
+
+
+def test_process_batch_does_not_ack_when_the_database_fails() -> None:
+    class BrokenEngine(FakeEngine):
+        def execute(self, _statement) -> Any:
+            raise RuntimeError("database is down")
+
+    r = FakeStreamRedis()
+    consumer = StreamConsumer(cast(redis.Redis, r), "events", "workers", "w1", "dead")
+
+    with pytest.raises(RuntimeError):
+        process_batch(
+            [("1", {"data": json.dumps(make_event())})],
+            r=cast(redis.Redis, r),
+            engine=cast(Engine, BrokenEngine([])),
+            consumer=consumer,
+            settings=cast(Settings, SimpleNamespace(judge_enabled=False)),
+        )
+
+    # Not acked -> stays pending -> reclaimed later.
+    assert r.acked == []

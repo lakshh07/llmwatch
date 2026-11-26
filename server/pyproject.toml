@@ -23,6 +23,7 @@ dependencies = [
 llmwatch-server = "llmwatch_server:main"
 llmwatch-migrate = "llmwatch_server.migrate:main"
 llmwatch-worker = "llmwatch_server.worker:run"
+llmwatch-judge = "llmwatch_server.judge_worker:run"
 llmwatch-alerter = "llmwatch_server.alerter:run"
 
 [build-system]
